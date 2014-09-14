@@ -1,4 +1,3 @@
-%Test the jacobian wrt relative distance constraints
 clear all; close all;
 
 Nwt=5;
