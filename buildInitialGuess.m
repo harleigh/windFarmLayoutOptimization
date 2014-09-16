@@ -42,8 +42,8 @@ function [ xInit, expectedPower ] = buildInitialGuess( Nwt, Nwd, L, ...
 %      turbineSites = gPop;
 % load 'currentRunResults' 'xOpt'
 % turbineSites = xOpt(1:2*Nwt);
-  turbineSites = L*rand(2*Nwt,1);
- 
+  %turbineSites = L*rand(2*Nwt,1);
+turbineSites = randomScheme( Nwt, L, dMin );
 
 
 %next we computer the true cost (no cost modification) of the turbine sites
