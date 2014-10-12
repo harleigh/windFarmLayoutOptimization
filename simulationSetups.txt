@@ -1,0 +1,84 @@
+
+For every case listed below, each have the same SNOPT parameters:
+    scaleRelD = 1e-6;
+    scaleConstraints4U = 10;
+    MinSquaredRelativeDistance = dMin^2;
+    MaxSquaredRelativeDistance = 2*L^2;
+
+
+Grady A.1 Case: 12 m/s from Due-North (0 degrees) with 30 turbines
+  *Turbine Parameters:
+      h = 60;                %hub height
+      Tdiam = 40;            %diameter of turbine blades
+      Trad = Tdiam/2;        %radius of turbine blades
+      z0 = 0.3;              %roughness constant
+      alpha = 0.5/log(h/z0); %wake spreading constant
+      Ct = 0.88;             %turbine thrust coefficient
+      a=(1-sqrt(1-Ct))/2;    %for calculation of D on next line
+      D = Tdiam*sqrt((1-a)/(1-2*a)); %downstream rotor diameter
+      gamma = 1-sqrt(1-Ct); %this is for the calculation of tildeU
+      powerCurveDomain = [0:30];  %for building and interpolating the power curve
+      powerCurve = makeMosettiPowerCurve(powerCurveDomain); %pg 29 of springer article
+      Nwt = 30;         %Number of turbines on the farm
+      L = 1800;         %Effective size of a side of the square Windfarm
+      dMin = 4*Tdiam;   %minimum safe (relative) distance between turbines
+  *Wind Parameters:
+      u0=[12]; %units: m/s, u0 must be a row vector
+      Nws = numel(u0);
+      windDirections = [0];
+      Nwd = numel(windDirections);
+      windDistribution = [1];  %windDistribution must be Nwd by Nws matrix
+
+Grady Case A.2: 12 m/s from every ten degrees from 0 to 350, each with the same
+                frequency
+*Turbine Parameters:
+      h = 60;                %hub height
+      Tdiam = 40;            %diameter of turbine blades
+      Trad = Tdiam/2;        %radius of turbine blades
+      z0 = 0.3;              %roughness constant
+      alpha = 0.5/log(h/z0); %wake spreading constant
+      Ct = 0.88;             %turbine thrust coefficient
+      a=(1-sqrt(1-Ct))/2;    %for calculation of D on next line
+      D = Tdiam*sqrt((1-a)/(1-2*a)); %downstream rotor diameter
+      gamma = 1-sqrt(1-Ct); %this is for the calculation of tildeU
+      powerCurveDomain = [0:30];  %for building and interpolating the power curve
+      powerCurve = makeMosettiPowerCurve(powerCurveDomain); %pg 29 of springer article
+      Nwt = 39;         %Number of turbines on the farm
+      L = 1800;         %Effective size of a side of the square Windfarm
+      dMin = 4*Tdiam;   %minimum safe (relative) distance between turbines
+  *Wind Parameters:
+      u0=[12]; %units: m/s, u0 must be a row vector
+      Nws = numel(u0);
+      windDirections = [0:10:350];
+      Nwd = numel(windDirections);
+      windDistribution = [1];  %windDistribution must be Nwd by Nws matrix
+
+
+
+Wasp Case
+   Here the farm is a square of length 1600, yet turbines at max, can only be placed
+   within 2*Tdiam of the farm border.  Hence the true farm size (i.e.: the space
+   we can work with) is length 1600-4Tdiam.
+
+   There are only 13 Turbines
+*Turbine Parameters:
+      h = 78;                %hub height
+      Tdiam = 80;            %diameter of turbine blades
+      Trad = Tdiam/2;        %radius of turbine blades
+      z0 = 0.01;              %roughness constant
+      alpha = 0.5/log(h/z0); %wake spreading constant
+      Ct = 0.88;             %turbine thrust coefficient
+      a=(1-sqrt(1-Ct))/2;    %for calculation of D on next line
+      D = Tdiam*sqrt((1-a)/(1-2*a)); %downstream rotor diameter
+      gamma = 1-sqrt(1-Ct); %this is for the calculation of tildeU
+      powerCurveDomain = [0:30];  %for building and interpolating the power curve
+      powerCurve = [0,0,0,0,2,97,255,459,726,1004,1330,1627,1772,1797,1802 * ones(1,10),1800,1800,zeros(1,5)];
+      Nwt = 39;         %Number of turbines on the farm
+      L = 1280;         %Effective size of a side of the square Windfarm
+      dMin = 4*Tdiam;   %minimum safe (relative) distance between turbines
+  *Wind Parameters:
+      u0=[12]; %units: m/s, u0 must be a row vector
+      Nws = numel(u0);
+      windDirections = [0:10:350];
+      Nwd = numel(windDirections);
+      windDistribution = [1];  %windDistribution must be Nwd by Nws matrix
