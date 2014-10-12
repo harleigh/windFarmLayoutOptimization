@@ -251,33 +251,3 @@ save currentRunResults;
 %
 % end gradySnopt.m
 %
-
-%{
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% % Parameters for the Vestas V80-1800 wind turbine for GRADY CASE I
-% h = 60;                %hub height
-% Tdiam = 40;            %diameter of turbine blades
-% Trad = Tdiam/2;        %radius of turbine blades
-% z0 = 0.3;              %roughness constant
-% alpha = 0.5/log(h/z0); %wake spreading constant
-% Ct = 0.88;             %turbine thrust coefficient
-% a=(1-sqrt(1-Ct))/2;    %for calculation of D on next line
-% D = Tdiam*sqrt((1-a)/(1-2*a)); %downstream rotor diameter
-% gamma = 1-sqrt(1-Ct); %this is for the calculation of tildeU
-% 
-% Nwt = 10;
-% powerCurve = [0,0,0,0,2,97,255,459,726,1004,1330,1627,1772,1797,1802 * ones(1,10),1800,1800,zeros(1,5)];
-% powerCurveDomain = [0:30];
-% L = 1800;         %windfarm length of side to square
-% dMin = 4*Tdiam;   %minimum safe (relative) distance between turbines
-
-%------Wind Parameters
-% u0=[8 12 17]; %units: m/s, u0 must be a row vector
-% Nws = numel(u0);
-% windDirections = [0 10 20];
-% Nwd = numel(windDirections);
-% 
-% %windDistribution must be Nwd by Nws matrix
-% windDistribution = [ones(2,1)*[0.0039    0.0085    0.0115];
-%                     0.0039    0.0108    0.0135];
-%}
