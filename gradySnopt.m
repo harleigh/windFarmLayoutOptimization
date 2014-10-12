@@ -24,98 +24,110 @@ clear all;
 close all;
 
 %{
+    Due to SNOPT, we must use global variables for any data that we wish to
+    use in the userfun.  Globals are used only in two places:
+      *in the userfun
+      *trueCostEvaluation (just to avoid a massive amount of parameters)
+
+  ---SNOPT (special) parameters---
   index4relD: sparsity pattern for the Jacobian G of the constraints F
-  u0: freedom wind speed; currently only 12 m/s
+  index4G: a logical index identifying the nonzero elements of G
+  scaleRelD: scale-factor to (squared) relative distance between turbines
+  scaleConstraints4U: scale factor for the constraints on the onset wind U
+  CostModification: determines whether we are running a modifed cost
+                    function (used to help avoid local minima)
+
+  ---Turbine Parameters---
   alpha: wake spreading constant
   Ct: turbine thrust constant
   Nwt: number of turbines (constant)
   Trad: radius of wind turbine (constant)
   D: downwind rotor diameter (constant)
+  powerCurve: the power curve of the turbine used in the simulation
+              (currently Vestras-80)
+  powerCurveDomain: wind speeds that the power curve are defined upon; used
+                    for interpolation purposes
+
+  movements: this exists to capture how SNOPT converges to the 'optimal'
+             solution (where later we make a movie with it)
+
+  ----Wind Parameters---
+  u0: a vector, free wind speed
+  Nws: Number of wind slices (amount that u0 is discritized; num of elements in u0)
+  windDirections: the directions of wind active in the rose map
+  Nwd: Number of wind directionss
+  windDistribution: with windDirections, this constitutes the data of a
+                    rose map
 %}
-global index4relD index4G scaleRelD scaleConstraints4U;
-global u0 alpha Ct gamma Nwt Trad D CostModification;
+global index4relD index4G scaleRelD scaleConstraints4U CostModification;
+global alpha Ct gamma Nwt Trad D powerCurve powerCurveDomain;
 global movements;
-%{
-    windDirections is an array which specifies which wind directions on a
-    rose map we are considering.  Each element in the array must be given
-    in degreesm and follow the orientation given in a Rose Map (eg: 0
-    degrees is due-north, whereas it would be 90 degrees on a standard
-    cartesian coordinate system)
-%}
-global windDirections Nwd;
+global u0 windDirections windDistribution Nwd Nws;
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Parameters for the Vestas V80-1800 wind turbine for GRADY CASE I
-h = 60;                %hub height
-Tdiam = 40;            %diameter of turbine blades
-Trad = Tdiam/2;        %radius of turbine blades
-z0 = 0.3;              %roughness constant
-alpha = 0.5/log(h/z0); %wake spreading constant
-Ct = 0.88;             %turbine thrust coefficient
-a=(1-sqrt(1-Ct))/2;    %for calculation of D on next line
-D = Tdiam*sqrt((1-a)/(1-2*a)); %downstream rotor diameter
-gamma = 1-sqrt(1-Ct); %this is for the calculation of tildeU
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Parameters for the [SNOPT constraints] with respect to GRADY CASE I
+%First we set the parameters of the simulation: turbine wind and Snopt
+%paramaters.
+[alpha, Ct, gamma, Nwt, Trad, D, L, dMin, ...
+     powerCurve, powerCurveDomain] = setTurbineParameters();
+ 
+[u0, windDirections, windDistribution, Nwd, Nws] = setWindParameters();
+%now set the snopt parameters 
+CostModification = 1;%whether we want to apply the modified cost calculation (to avoid local optima)
 scaleRelD = 1e-6;
-scaleConstraints4U = 10;  %this is new; used to be 10
-L = 1800;         %windfarm length of side to square
-dMin = 4*Tdiam;   %minimum safe (relative) distance between turbines
+scaleConstraints4U = 10;
 MinSquaredRelativeDistance = dMin^2;
 MaxSquaredRelativeDistance = 2*L^2;
-%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%----end setting parameters
 
+
+
+
+%userfun contains the calculation of the exected power of a turbine
+%setting, it packs the constraints into F, and calculates as much as G (the
+%jacobian of F wrt the decision variables) as possible.
 usrfun = 'gradyUserFun';
-
-u0=12; %units: m/s
-windDirections = 0;
-Nwd = numel(windDirections);
-Nwt = 30;
-
-CostModification = 1;% use modified cost function in SNOPT
 
 %{
    First, we generate an initial guess for Snopt and then use the expected
    power of that initial guess as a lower bound for the cost function (see
-   Flow Fupp below.
+   Flow Fupp below).
    Format of xInit:
-     -- xInit(1:Nwt)  xPositions of turbines 1 to Nwt
-     -- xInit(Nwt+1:2*Nwt) yPositions of turbines 1 to Nwt
-     -- x((1+w)*Nwt+1):(2+w)*Nwt) is the onset wind in the w-th wind diretion
+     -- xInit(1:Nwt)  xPositions of turbines
+     -- xInit(Nwt+1:2*Nwt) yPositions of turbines
+     -- x((2+(w-1)*Nws)*Nwt+1:(2+w*Nws)*Nwt) is the onset wind in the w-th wind diretion
           where w=1,...,Nwd
 %}
-[xInit, expectedPowerInitial ] = buildInitialGuess( Nwt, Nwd, L, dMin, Trad, alpha );
+[xInit, expectedPowerInitial ] = buildInitialGuess( Nwt, Nwd, Nws, ... 
+                                                    L, dMin, Trad, alpha );
 
 %for making a movie on how Snopt converges to the optimal opsition
 movements(:,1) = xInit(1:2*Nwt);
 
-%As there are Nwt turbines and Nwd wind directions: there are Nwt xPositions,
-%Nwt yPositions, and Nwt*Nwd Onset wind variables
+%This is used to convienently set the upper and lower bounds of the
+%decision variables (see xLow and xUpp)
 numDecVar = length(xInit);
 
-%Since there are Nwt turbines on the farm, there are Nwt xPositions and Nwt
-%yPositions
+%There are Nwt turbines on the 2D farm, hence there are Nwt xPositions as well as
+%Nwt yPositions
 numXpos = Nwt;
 numYpos = Nwt;
-%For each wind direction (Nwd in total) we have Nwt onset wind constraints
-%(one for each turbine).  Hence the total number of onset wind desision
-%variables we have are Nwd*Nwt.
-numOnsetWindVar = Nwd*Nwt;
+%For each wind direction (Nwd in total) we have Nwt*Nws onset wind constraints
+%(one for each turbine, for each wind slice).  Hence the total number of onset
+%wind desision variables we have are Nwd*Nwt*Nws.
+numOnsetWindVar = Nwd*Nwt*Nws;
 
  %{
-   Next we set the lower and upper bounds on the decision variables 
+   Next we set the lower and upper bounds on the decision variables.
    *Since the positions of the turbines are in [0,L]x[0,L], we have that:
-     - Lower bound >=0
-     - Upper bound <= L
+     - Lower bound of turbine (x,y) positions >=0
+     - Upper bound of turbine (x,y) positions <= L
    *The lower and upper bounds for the onset wind of each turbine are 0  and
-    u0 respectivly 
+    the max element in u0 respectivly 
  %}
 xLow = zeros(numDecVar,1); 
 xUpp = [ L*ones(numXpos,1);    %upper bound for xPositions
          L*ones(numYpos,1);    %upper bound for yPositions
-         u0*ones(numOnsetWindVar,1) ]; %upper bound for the onset wind of each turbine for each wind direction
+         max(u0)*ones(numOnsetWindVar,1) ]; %upper bound for the onset wind of each turbine for each wind direction
 
 
 %determine the number of relative-distance constraints for the problem.
@@ -162,8 +174,9 @@ A  = [];  iAfun = [];  jAvar = [];
 
 
 
-% SparsityPattern: to be finished
-jacobianSparsityConstraints = findSparsityPattern(Nwt,Nwd,index4relD);
+%Next we determine the sparsity of the Jacobian of the constraints with
+%respect to the decision variables.
+jacobianSparsityConstraints = findSparsityPattern(Nwt,Nwd, Nws, index4relD);
 [iGfun,jGvar] = find(jacobianSparsityConstraints); 
 index4G = find(jacobianSparsityConstraints); 
 
@@ -220,7 +233,7 @@ disp(strcat('SNOPT exited with INFO==', num2str(INFO)));
 %To calcuate the efficiency of the wind-turbine layout.  Note: Perfect
 %Power along Nwd wind directions is equal to perfect power along each wind
 %direction.  
-perfectPower = (0.3*(u0^3*Nwt))*Nwd;
+perfectPower = calcPerfectPower(Nwt, Nwd, u0, windDistribution, powerCurveDomain, powerCurve);
 [expectedPowerOpt,U] = trueCostEvaluation( xOpt(1:2*Nwt) );
 disp(strcat('Expected Power of Initial Guess: ', num2str(expectedPowerInitial)));
 disp(strcat('-----Efficiency: ', strcat(num2str(expectedPowerInitial/perfectPower*100),'%')));
@@ -238,3 +251,33 @@ save currentRunResults;
 %
 % end gradySnopt.m
 %
+
+%{
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% % Parameters for the Vestas V80-1800 wind turbine for GRADY CASE I
+% h = 60;                %hub height
+% Tdiam = 40;            %diameter of turbine blades
+% Trad = Tdiam/2;        %radius of turbine blades
+% z0 = 0.3;              %roughness constant
+% alpha = 0.5/log(h/z0); %wake spreading constant
+% Ct = 0.88;             %turbine thrust coefficient
+% a=(1-sqrt(1-Ct))/2;    %for calculation of D on next line
+% D = Tdiam*sqrt((1-a)/(1-2*a)); %downstream rotor diameter
+% gamma = 1-sqrt(1-Ct); %this is for the calculation of tildeU
+% 
+% Nwt = 10;
+% powerCurve = [0,0,0,0,2,97,255,459,726,1004,1330,1627,1772,1797,1802 * ones(1,10),1800,1800,zeros(1,5)];
+% powerCurveDomain = [0:30];
+% L = 1800;         %windfarm length of side to square
+% dMin = 4*Tdiam;   %minimum safe (relative) distance between turbines
+
+%------Wind Parameters
+% u0=[8 12 17]; %units: m/s, u0 must be a row vector
+% Nws = numel(u0);
+% windDirections = [0 10 20];
+% Nwd = numel(windDirections);
+% 
+% %windDistribution must be Nwd by Nws matrix
+% windDistribution = [ones(2,1)*[0.0039    0.0085    0.0115];
+%                     0.0039    0.0108    0.0135];
+%}

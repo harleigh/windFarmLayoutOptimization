@@ -55,26 +55,23 @@
        due to the initial wind speed (freedom wind speed u0) as well as the
        (linear) wake effect.
 %}
-function [ U ] = calcOnsetWind( Q, dwD, u0, D, alpha, Ct )
+function [ U ] = calcOnsetWind( Q, dwD, u0, Nwt, Nws, D, alpha, Ct )
 
-
-    Nwt = size(Q,1);
-    U = zeros(Nwt,1);
+    U = zeros(Nwt,Nws);
     gamma = (1-sqrt(1-Ct)); %this is for the calculation of tildeU
 
     %by the way we indexed the turbines, we know that the onset wind speed
-    %for T1 is u0, the free wind speed.
-    U(1)=u0;
+    %for T1 is u0, the free wind speed. u0 is a row vector
+    U(1,1:Nws)=u0;
     
     %Build U; iterate over columns of Q, taking entries upto but not 
     %including the main diagonal; we start at k=2 as k=1 was done
     %above (i.e.: U(1)=u0)
+    %U is build row by row
     for k=2:Nwt
-                            %everything past '(1/u0)*' is tildeU(i,k)
-        Beta=ones(k-1,1)-(1/u0)*...
-            (U(1:k-1,1).*(ones(k-1,1)-gamma*((D./(D+(2*alpha)*dwD(1:k-1,k))).^2)));
-        %U(k) = u0*(1-norm(Q(1:k-1,k).*B));% Q should not be squared
-        U(k) = u0*(1-sqrt(sum(Q(1:k-1,k).*Beta.*Beta)));
+        Beta= bsxfun(@times, u0, ones(k-1,1)) - bsxfun(@times, U(1:k-1,1:Nws),  ...
+                      (ones(k-1,1)-gamma*((D./(D+(2*alpha)*dwD(1:k-1,k))).^2)));
+        U(k,1:Nws) = u0 - sqrt(sum(bsxfun(@times, Q(1:k-1,k), Beta.^2),1));
     end
    
 end
@@ -87,4 +84,36 @@ Also, .*Beta.*Beta is replaced by Beta.^2
 
  B=u0*ones(k-1,1)-(U(1:k-1,1).*(ones(k-1,1)-gamma*((D./(D+(2*alpha)*dwD(1:k-1,k))).^2)));
  U(k) = u0-sqrt(sum(Q(1:k-1,k).*(B.^2)));
+%}
+%{
+ Nwt = size(Q,1);
+    U = zeros(Nwt,1);
+    gamma = (1-sqrt(1-Ct)); %this is for the calculation of tildeU
+
+    %by the way we indexed the turbines, we know that the onset wind speed
+    %for T1 is u0, the free wind speed.
+    U(1)=u0;
+    
+    %Build U; iterate over columns of Q, taking entries upto but not 
+    %including the main diagonal; we start at k=2 as k=1 was done
+    %above (i.e.: U(1)=u0)
+    for k=2:Nwt
+                            %everything past '(1/u0)*' is tildeU(i,k)
+%         Beta=ones(k-1,1)-(1/u0)*...
+%             (U(1:k-1,1).*(ones(k-1,1)-gamma*((D./(D+(2*alpha)*dwD(1:k-1,k))).^2)));
+          Beta=u0*ones(k-1,1)- ... %uTilde on next line
+            (U(1:k-1,1).*(ones(k-1,1)-gamma*((D./(D+(2*alpha)*dwD(1:k-1,k))).^2)));
+        %U(k) = u0*(1-norm(Q(1:k-1,k).*B));% Q should not be squared
+        U(k) = u0*(1-sqrt(sum(Q(1:k-1,k).*Beta.*Beta)));
+    end
+   
+%}
+%{
+A = bsxfun(@times, u0, ones(k-1,1));
+        B = bsxfun(@times, U(1:k-1,1:Nws), (ones(k-1,1)-gamma*((D./(D+(2*alpha)*dwD(1:k-1,k))).^2)));
+        Beta=A-B;
+        C = (Beta.^2);
+        E = bsxfun(@times, Q(1:k-1,k), C);
+        H = u0 - sqrt(sum(E,1));
+        U(k,1:Nws) = H;
 %}

@@ -139,5 +139,5 @@ function [ Q, shadowedFullySparsity ] = calcVelocityDeficit ...
     alpha2 = 2*acos((wakeRadius(I).^2 + cwD(I).^2 - (Trad^2))./(2*wakeRadius(I).*cwD(I)));
     
     Q(I) = (1/(2*A0))*(Trad^2*(alpha1-sin(alpha1)) + (wakeRadius(I).^2).*(alpha2-sin(alpha2)));
-    Q = triu(Q,1); %?????????
+%    Q = triu(Q,1); %?????????
 end

@@ -39,7 +39,6 @@ examples:
 %}
 function [ cwD ] = calcCrossWindDist( xPos )
 
-    global Nwt
-    cwD = triu( repmat(xPos,1,Nwt) - repmat(xPos',Nwt,1) ,1 );
-    cwD = abs(cwD);
+    cwD = abs(triu(bsxfun(@minus, xPos,xPos'),1));
+
 end

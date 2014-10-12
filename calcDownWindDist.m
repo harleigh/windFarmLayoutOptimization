@@ -26,7 +26,6 @@
 %}
 function [ dwD ] = calcDownWindDist( yPos )
 
-    global Nwt
-    dwD = triu(repmat(yPos, 1, Nwt) - repmat(yPos', Nwt,1),1);
-     
+    dwD = triu(bsxfun(@minus, yPos, yPos'),1);
+
 end

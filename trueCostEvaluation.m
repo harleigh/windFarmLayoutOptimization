@@ -21,15 +21,17 @@
    Outputs:
      expectedPower: Anual expected power output of the wind farm
                     configuration, in kWh.
-     U: the onset wind at each turbine, (positions given in as the input x).
-        That is, U represents the actual wind that each turbine is receiving.
-        Hence the information for turbine 1 (x,y,U) is
-             x(1)        (the xPosition of turbine 1)
-             x(Nwt+1)    (the yPosition of turbine 1)
-             x(2*Nwt+1)  (the onset wind speed for turbine 1 in the first wind
-                         direction)
-             x((w+2)*Nwd +1) onset wind for turbine 1 in the wth wind
-                             direction
+     U: the onset wind of each turbine for each wind direction and each
+        slice.  U is an Nwt by Nwd*Nws matrix such that
+             U = [ U_w=1 U_w=2 ... U_w=Nwd ]
+        where U_w=i is the onset wind of the Nwt turbines along the ith
+        wind direction (the underscore is to signify subscript of course)
+        Now U_w=i is a Nwt by Nws marix
+             U_w=i = [U^s=1 U^s=2   U^s=Nws]
+        Where U^s=j is the onset wind wrt the jth wind slice of the free
+        wind and is a row vector of Nwt by 1
+             U^s=j = [U_1 U_2 ... U_Nwt]
+         where U_i is the ith wind turbine
 
    Notes:
      When we speak of 'cost' we mean the expected anual power output of a
@@ -46,15 +48,21 @@
 %}
 function [ expectedPower, U ] = trueCostEvaluation( x ) %x is a column vector
 
-    global u0 alpha Ct Nwt Trad D;
-    global windDirections Nwd;
+    global alpha Ct Nwt Trad D powerCurve powerCurveDomain;
+    global u0 windDirections windDistribution Nwd Nws;
     
-    %variable representing whether we are performing the cost with respect
-    %to a cost modifier; since in this function we want the true 
-    mode = 0;
+    %Variable representing whether we are performing the cost with respect
+    %to a cost modifier; in this function we want the true cost, i.e.: the
+    %expected anual kilowatt per hour.
+    applyCostModification = 0;
     
-    %column k is the onset wind speed for the turbines in wind direction k
-    U = zeros(Nwt,Nwd);
+    %The onset wind of each turbine along each wind direction for ever wind
+    %slice. For each wind direction w U(1:Nwt,Nws*(w-1)+1:w*Nws) is a Nwt
+    %by Nws matrix representing the onset wind of each turbine for each
+    %wind slice
+    U = zeros(Nwt,Nwd*Nws);
+    
+    expectedPower=0;
 
     XLOC = 1;  %enumeration: location of xPositions in turbineProfiles is col 1
     YLOC = 2;  %enumeration: location of yPositions in turbineProfiles is col 2
@@ -76,18 +84,17 @@ function [ expectedPower, U ] = trueCostEvaluation( x ) %x is a column vector
         cwD = calcCrossWindDist(indexedTurbines(:,XLOC));
         wakeRadius = calcWakeRadius(dwD, Trad, alpha );
         inWake = calcInWake( cwD, wakeRadius, Trad );
-        [Q,~] = calcVelocityDeficit( cwD, dwD, inWake, wakeRadius, Trad, mode);
-        
+        [Q,~] = calcVelocityDeficit( cwD, dwD, inWake, wakeRadius, Trad, applyCostModification);
+
         %Note that the onset wind in the wind direction w is indexed with
         %respect to the indexed-Turbines.        
-        U(:,w) = calcOnsetWind( Q, dwD, u0, D, alpha, Ct );
+        U(:,Nws*(w-1)+1:w*Nws) = calcOnsetWind( Q, dwD, u0, Nwt, Nws, D, alpha, Ct );
+        
+        %calculate the cost of the wind farm
+        turbinePower = interp1(powerCurveDomain, powerCurve, U(:,(w-1)*Nws+1:w*Nws),'linear');
+        expectedPower = expectedPower + sum(sum(bsxfun(@times, windDistribution(w,:),turbinePower)));
     end
-    %Postcondition: U is an Nwt by Nwd matrix, column w in U is the onset
-    %wind (with respect to the indexed turbine postions) along wind
-    %direction w
     
-    %since we only consider wind at 12 m/s the power curve is 0.3*U^3
-    expectedPower = sum(U(:).^3)*0.3;
 end
 
 %

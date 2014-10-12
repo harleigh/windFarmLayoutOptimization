@@ -22,17 +22,19 @@ Notes:
 %}
 function [ F, G ] = gradyUserFun( x ) %x is a column vector
 
-    global index4relD index4G scaleRelD scaleConstraints4U;
-    global u0 alpha Nwt Trad CostModification;
+    global index4relD index4G scaleRelD scaleConstraints4U CostModification;
+    global alpha gamma Nwt Trad D powerCurve powerCurveDomain;
     global movements;
-    global windDirections Nwd;
+    global u0 windDirections Nwd Nws windDistribution;
     
     %column k is the onset wind speed for the turbines in wind direction k
-    U = zeros(Nwt,Nwd);
-    Constraints_4_U = zeros(Nwt, Nwd);
+    U = zeros(Nwt,Nwd*Nws);
+    Constraints_4_U = zeros(Nwt, Nwd*Nws);
     numRelDistConstraints = numel(index4relD);
-    lengthF = 1 + numRelDistConstraints + Nwd*Nwt;
-    fullG = NaN(lengthF,(Nwd+2)*Nwt);
+    lengthF = 1 + numRelDistConstraints + Nwd*Nwt*Nws;
+    fullG = NaN(lengthF,(Nwd*Nws+2)*Nwt);
+    expectedPower=0;
+    
     
     gradRelDwrtX = zeros(numRelDistConstraints,Nwt);
     gradRelDwrtY = zeros(numRelDistConstraints,Nwt);
@@ -68,26 +70,56 @@ function [ F, G ] = gradyUserFun( x ) %x is a column vector
         inWake = calcInWake( cwD, wakeRadius, Trad );
         [Q,~] = calcVelocityDeficit( cwD, dwD, inWake, wakeRadius, Trad, CostModification);
 
-        %Critticaly important:Note U is ordered with respect to the indexed turbines
-        %grab the onset wind for the current wind direction w
-        U(:,w) = x(((1+w)*Nwt+1):(2+w)*Nwt);
+        %Critticaly important: U is ordered with respect to the indexed
+        %turbines.
+        %Here we grab the onset wind for the current wind direction w from
+        %x and using logical indexing to store it into U
+        U((w-1)*Nwt*Nws+1:w*Nwt*Nws) = x((2+(w-1)*Nws)*Nwt+1 : (2+w*Nws)*Nwt);
         
         %Weighted_U_tilde is upper triangular with diagonal entries be zeros
         %Note, calcWake needs the indexed version of onset wind
-        [ Weighted_U_tilde, ...
-          Weighted_U_tilde_squared, ...
-          D_Utilde_D_U ] = calcWakeElements( U(:,w), Q, dwD ); 
+%         [ Weighted_U_tilde, ...
+%           Weighted_U_tilde_squared, ...
+%           D_Utilde_D_U ] = calcWakeElements( U(:,(w-1)*Nws+1:w*Nws), Q, dwD ); 
       
         %the square root of the sum of the matrix Weighted_U_tilde_squared
         %is the expression under the square root in the formula for Ui in
         %the research papers.  Note that we transpose it to just make a
         %column vector, for the calculation of the constraints for onset
         %wind on the next line.
-        velocityLost = sqrt( sum(Weighted_U_tilde_squared,1)');
+%         velocityLost = sqrt( sum(Weighted_U_tilde_squared,1)');
 
-        %the constraints for U is with respect to the wind direction
-        Constraints_4_U(:,w) = (U(:,w) - (u0 - velocityLost)); 
+        velocityLost = zeros(Nwt,Nws);
+        for k=2:Nwt
+            
+%             tA = Q(1:k-1,k);
+%             tB = U(1:k-1,(w-1)*Nws+1:w*Nws);
+%             tC = ones(k-1,1)-gamma*((D./(D+(2*alpha)*dwD(1:k-1,k))).^2);
+%             tD = bsxfun(@times, tB, tC);
+%             tE = bsxfun(@minus,u0, tD);
+%             tF = bsxfun(@times, tA, tE.^2); %tA.*tE.^2; 
+%             tH = sqrt(sum(tF,1));
+%             tI(k,1:Nws) = tH;
+            
+            velocityLost(k,1:Nws) = sqrt(sum(bsxfun(@times, Q(1:k-1,k), bsxfun(@minus,u0, bsxfun(@times, U(1:k-1,(w-1)*Nws+1:w*Nws), ones(k-1,1)-gamma*((D./(D+(2*alpha)*dwD(1:k-1,k))).^2))).^2),1));
 
+        end
+        
+        
+        %Store the constraints for U along the current wind direction (it's
+        %of size Nwt by Nws) In the end, constraints for U is Nwt by
+        %Nwd*Nws
+        %Constraints_4_U(:,w) = U(:,(w-1)*Nws+1:w*Nws) - bsxfun(@minus,u0,velocityLost); 
+        Constraints_4_U(:,(w-1)*Nws+1:w*Nws) = U(:,(w-1)*Nws+1:w*Nws) - bsxfun(@minus,u0,velocityLost); 
+        
+        
+        
+        
+        %Calculate the expected power for all turbines along this wind
+        %direction.
+        turbinePower = interp1(powerCurveDomain, powerCurve, U(:,(w-1)*Nws+1:w*Nws),'linear');
+        expectedPower = expectedPower + sum(sum(bsxfun(@times, windDistribution(w,:),turbinePower)));
+%{
         %Jacobian of Constraints_4_U w.r.t. U along the current direction,
         %build from Weighted_U_tilde, D_Utilde_D_U and velocity_lost which
         %are updated in calcWakeElements
@@ -105,6 +137,7 @@ function [ F, G ] = gradyUserFun( x ) %x is a column vector
         fullG( (end-((Nwd-(w-1))*Nwt) +1):( (end-((Nwd-(w-1))*Nwt))+Nwt), ...
                (end-((Nwd-(w-1))*Nwt) +1):( (end-((Nwd-(w-1))*Nwt))+Nwt)) ...
                   = Grad_Cons_U(:,:); 
+        %}
     %%%%%%%-----end cost
     end
 
@@ -118,7 +151,7 @@ function [ F, G ] = gradyUserFun( x ) %x is a column vector
 
     %The cost function: since we only consider wind at 12 m/s the power curve
     %                   is 0.3*U^3
-    expectedPower = sum(U(:).^3)*0.3;
+% % %     expectedPower = sum(U(:).^3)*0.3;
     
     %Critticaly important: relative distance should be w.r.t. the original
     %index for the calculation of the gradient (as the sparsity was set to
@@ -134,8 +167,8 @@ function [ F, G ] = gradyUserFun( x ) %x is a column vector
     
       
     %Jacobian with respect to cost function: sum(U(:).^3)*0.3;
-    fullG(1,1:2*Nwt) = 0;   %zero for x and y
-    fullG(1,2*Nwt+1:end) = 0.9*U(:).^2; %onset wind
+% % %     fullG(1,1:2*Nwt) = 0;   %zero for x and y
+% % %     fullG(1,2*Nwt+1:end) = 0.9*U(:).^2; %onset wind
     
     %Jacobian: relative distance constraints (x(i)-x(j))^2-(y(i)-y(j))^2
     absPos = [x(1:Nwt), x(Nwt+1:2*Nwt)];

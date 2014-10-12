@@ -28,7 +28,7 @@
      as by isolating it here, it is easier to tweek the initial guess,
      rather than scroll through the main snopt file.
 %}
-function [ xInit, expectedPower ] = buildInitialGuess( Nwt, Nwd, L, ...
+function [ xInit, expectedPower ] = buildInitialGuess( Nwt, Nwd, Nws, L, ...
                                                        dMin, Trad, alpha )
 
 %Generate initial guess for turbine x,y positions on a square farm of width
@@ -52,19 +52,8 @@ turbineSites = randomScheme( Nwt, L, dMin );
 %each turbine for each wind direction.
 [expectedPower, U] = trueCostEvaluation( turbineSites );
 
-turbineProfiles = [ turbineSites(1:Nwt), turbineSites(Nwt+1:2*Nwt), U ];
-XLOC = 1;  %enumeration: location of xPositions in turbineProfiles is col 1
-YLOC = 2;  %enumeration: location of yPositions in turbineProfiles is col 2
-%ULOC is the location of the onset wind constraints for each wind
-%direction begins at column 3 and has Nwt columns (each of length Nwt); the '+2'
-%is because the first two columns are x,y position
-ULOC = 3:(Nwd+2);
-turbineXpos = turbineProfiles(:,XLOC); %loc of x values of turbines in col vec
-turbineYpos = turbineProfiles(:,YLOC); %loc of y vals of turbs in col vec
-Onsetwind   = turbineProfiles(:,ULOC); % onset wind speed of turbines: Nwt by Nwd
 
-%pack the generated guess into Snopt format--i.e.: as a clolumn
-xInit = [turbineXpos; turbineYpos; Onsetwind(:)];
+xInit = [turbineSites(1:Nwt); turbineSites(Nwt+1:2*Nwt); U(:)];
 
 end
 
